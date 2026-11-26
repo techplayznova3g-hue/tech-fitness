@@ -77,8 +77,67 @@ nav.fixed>div{height:66px;padding:0 6px;align-items:center}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 
+<style id="splash-styles">
+#tf-splash{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 42%,#1a2200 0%,#0b0c0b 58%);overflow:hidden;transition:opacity .5s ease,visibility .5s ease}
+#tf-splash.out{opacity:0;visibility:hidden;pointer-events:none}
+.tfs-stage{position:relative;display:grid;justify-items:center;gap:22px;padding:24px}
+.tfs-rings{position:absolute;top:calc(24px + 48px);left:50%;width:0;height:0}
+.tfs-rings i{position:absolute;left:-48px;top:-48px;width:96px;height:96px;border-radius:50%;border:2px solid #c8ff00;opacity:0;animation:tfsRing 2s ease-out .55s infinite}
+.tfs-rings i:nth-child(2){animation-delay:.95s}.tfs-rings i:nth-child(3){animation-delay:1.35s}
+@keyframes tfsRing{0%{transform:scale(.7);opacity:.55}100%{transform:scale(3.4);opacity:0}}
+.tfs-logo{position:relative;width:96px;height:96px;border-radius:28px;background:linear-gradient(145deg,#d9ff3d,#a8e000);display:grid;place-items:center;overflow:hidden;box-shadow:0 0 0 0 rgba(200,255,0,.5),0 18px 50px rgba(200,255,0,.25);animation:tfsPop .7s cubic-bezier(.2,1.5,.4,1) both,tfsGlow 1.8s ease-in-out .9s infinite}
+@keyframes tfsPop{0%{transform:scale(.2) rotate(-18deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
+@keyframes tfsGlow{0%,100%{box-shadow:0 0 0 0 rgba(200,255,0,.45),0 18px 50px rgba(200,255,0,.22)}50%{box-shadow:0 0 0 14px rgba(200,255,0,0),0 18px 64px rgba(200,255,0,.42)}}
+.tfs-logo svg{width:56px;height:56px;overflow:visible}
+.tfs-bolt{fill:#0b0c0b;fill-opacity:0;stroke:#0b0c0b;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;animation:tfsDraw .8s ease .35s forwards,tfsFill .35s ease 1s forwards}
+@keyframes tfsDraw{to{stroke-dashoffset:0}}
+@keyframes tfsFill{to{fill-opacity:1}}
+.tfs-shine{position:absolute;inset:-20%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.75) 50%,transparent 60%);transform:translateX(-120%);animation:tfsShine .9s ease 1.05s forwards}
+@keyframes tfsShine{to{transform:translateX(120%)}}
+.tfs-word{display:flex;gap:2px;margin:0;font:800 30px/1 Orbitron,Inter,system-ui,sans-serif;letter-spacing:.08em;color:#f4f5f0}
+.tfs-word span{display:inline-block;opacity:0;transform:translateY(14px);animation:tfsLetter .5s ease forwards;animation-delay:calc(1.05s + var(--i) * .045s)}
+.tfs-word span.sp{width:.5em}
+@keyframes tfsLetter{to{opacity:1;transform:none}}
+.tfs-tag{margin:-8px 0 0;font:600 11px/1 Inter,system-ui,sans-serif;letter-spacing:.32em;text-transform:uppercase;color:#c8ff00;opacity:0;animation:tfsFade .6s ease 1.7s forwards}
+@keyframes tfsFade{to{opacity:.9}}
+.tfs-bar{width:140px;height:3px;border-radius:99px;background:#232422;overflow:hidden;opacity:0;animation:tfsFade .3s ease 1.2s forwards}
+.tfs-bar i{display:block;height:100%;width:100%;background:#c8ff00;border-radius:99px;transform:scaleX(0);transform-origin:left;animation:tfsBar 1.2s cubic-bezier(.4,0,.2,1) 1.2s forwards}
+@keyframes tfsBar{to{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){
+  .tfs-rings{display:none}
+  .tfs-logo,.tfs-bolt,.tfs-shine,.tfs-word span,.tfs-tag,.tfs-bar,.tfs-bar i{animation:none!important}
+  .tfs-logo{opacity:1}.tfs-bolt{stroke-dashoffset:0;fill-opacity:1}.tfs-shine{display:none}
+  .tfs-word span,.tfs-tag{opacity:1;transform:none}.tfs-bar{opacity:1}.tfs-bar i{transform:scaleX(1)}
+}
+</style>
 </head>
 <body class="min-h-screen flex flex-col justify-between bg-slate-950 text-slate-100 font-sans antialiased">
+    <!-- Animated splash (plays while the app loads) -->
+    <div id="tf-splash" role="img" aria-label="Tech Fitness is loading">
+      <div class="tfs-stage">
+        <div class="tfs-rings"><i></i><i></i><i></i></div>
+        <div class="tfs-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tfs-bolt" pathLength="1" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span class="tfs-shine"></span></div>
+        <h1 class="tfs-word" aria-hidden="true"><span style="--i:0">T</span><span style="--i:1">E</span><span style="--i:2">C</span><span style="--i:3">H</span><span class="sp"></span><span style="--i:5">F</span><span style="--i:6">I</span><span style="--i:7">T</span><span style="--i:8">N</span><span style="--i:9">E</span><span style="--i:10">S</span><span style="--i:11">S</span></h1>
+        <p class="tfs-tag">Train · Fuel · Track</p>
+        <div class="tfs-bar"><i></i></div>
+      </div>
+    </div>
+    <script>window.__tfSplashStart=performance.now();</script>
+<script id="splash-logic">
+(function () {
+  'use strict';
+  const s = document.getElementById('tf-splash'); if (!s) return;
+  let done = false;
+  const hide = () => { if (done) return; done = true; s.classList.add('out'); setTimeout(() => s.remove(), 800); };
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const MIN = reduced ? 700 : 2700, t0 = window.__tfSplashStart || performance.now();
+  const ready = () => setTimeout(hide, Math.max(0, MIN - (performance.now() - t0)));
+  if (document.readyState === 'complete') ready(); else window.addEventListener('load', ready);
+  setTimeout(hide, 5000);                 // never trap the app behind the splash
+  s.addEventListener('click', hide);      // tap to skip
+})();
+</script>
+
 
     <!-- ==================== VIEW 1: LOGIN / SIGN UP SCREEN ==================== -->
     <section id="auth-screen" class="fixed inset-0 z-50 bg-slate-950 flex flex-col justify-center px-6 py-8 overflow-y-auto">
@@ -2169,6 +2228,8 @@ nav.fixed>div{height:66px;padding:0 6px;align-items:center}
     <div class="ns-cam"><video id="nutrition-scan-video" playsinline muted></video><i></i></div>
     <p id="nutrition-scan-status" class="ns-status">Starting camera…</p>
     <div class="ns-row"><input id="nutrition-scan-code" inputmode="numeric" placeholder="Type the barcode number"><button class="nutrition-primary-btn" onclick="lookupNutritionBarcode(document.getElementById('nutrition-scan-code').value)">Look up</button></div>
+    <p id="ns-hint" class="ns-hint">💡 <b>Not recognised?</b> Type the barcode, tap Look up, then tell me what it is. I’ll remember it - next time you scan it, I’ll know straight away.</p>
+    <div id="ns-mine"></div>
     <div class="ns-row"><input id="nutrition-scan-q" type="search" placeholder="Or search a product, e.g. Provita"><button class="nutrition-primary-btn" onclick="searchNutritionProducts()">Search</button></div>
     <div id="nutrition-scan-out"></div>
   </div>
@@ -3744,6 +3805,122 @@ loadNutritionData();
   };
 })();
 </script>
+
+<!-- ==================== BARCODE: TEACH THE APP A PRODUCT ==================== -->
+<style id="barcode-teach-styles">
+.ns-row .nutrition-primary-btn{width:auto;flex:0 0 auto;padding:0 18px;min-height:46px}
+.ns-row input{flex:1 1 auto;width:auto;min-width:0}
+.ns-hint{font-size:12px;line-height:1.5;color:#c9cdc4;background:rgba(200,255,0,.07);border:1px solid rgba(200,255,0,.2);border-radius:16px;padding:10px 12px;margin:10px 0 0}
+.ns-hint b{color:#c8ff00}
+.ns-ok{font-size:12px;line-height:1.5;color:#e6f7a8;background:rgba(200,255,0,.1);border:1px solid rgba(200,255,0,.25);border-radius:14px;padding:8px 12px;margin:10px 0}
+.ns-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.ns-card input.ns-f{width:100%;background:#232422;color:#f4f5f0;border:1px solid #2a2c29;border-radius:16px;padding:12px;font-size:14px;margin-top:8px}
+.ns-card label.ns-l{display:block;font-size:11px;font-weight:700;color:#8b8f88;margin:12px 0 0;letter-spacing:.04em;text-transform:uppercase}
+.ns-card .ns-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.ns-ghost{border:1px solid #2a2c29;background:#171817;color:#f4f5f0;font-weight:700;border-radius:999px;padding:12px;font-size:13px}
+.ns-mine summary{cursor:pointer;font-size:12px;font-weight:700;color:#c9cdc4;margin-top:10px}
+.ns-mine-row{display:flex;align-items:center;gap:8px;background:#171817;border:1px solid #2a2c29;border-radius:14px;padding:8px 12px;margin-top:6px;font-size:13px}
+.ns-mine-row div{flex:1;min-width:0}.ns-mine-row small{display:block;color:#8b8f88;font-size:11px}
+.ns-mine-row button{border:0;background:transparent;color:#ff8a8a;font-size:16px}
+</style>
+
+<script id="barcode-teach-logic">
+(function () {
+  'use strict';
+  const KEY = 'tech_fitness_my_barcodes_v1';
+  const $ = id => document.getElementById(id);
+  const esc = v => escapeHTML(v);
+  const norm = c => String(c || '').replace(/\D/g, '').replace(/^0+/, '');   // 0011020020 and 011020020 are the same product
+  let mine = {};
+  try { const p = JSON.parse(localStorage.getItem(KEY) || '{}'); if (p && typeof p === 'object' && !Array.isArray(p)) mine = p; } catch (e) { /* start empty */ }
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(mine)); } catch (e) { nutritionToast('Could not save on this device.'); } };
+  const toProd = r => ({ name: r.name, brand: 'Saved by you', code: r.code, per: r.per, grams: r.grams, mine: true });
+
+  // --- the little explainer + saved list inside the scanner ---
+  function renderMine() {
+    const box = $('ns-mine'); if (!box) return;
+    const list = Object.values(mine).sort((a, b) => (b.saved || 0) - (a.saved || 0));
+    box.innerHTML = list.length ? `<details class="ns-mine"><summary>My saved products (${list.length})</summary>${list.map(r =>
+      `<div class="ns-mine-row"><div>${esc(r.name)}<small>${esc(r.code)} · ${Math.round(r.per.kcal)} kcal per 100 g</small></div><button type="button" aria-label="Forget ${esc(r.name)}" onclick="nsForget('${norm(r.code)}')">✕</button></div>`).join('')}</details>` : '';
+  }
+  const _open = window.openNutritionScan;
+  window.openNutritionScan = function () { _open.apply(this, arguments); renderMine(); };
+
+  // --- lookup: your saved products first, then the food database; if neither knows it, teach it ---
+  window.lookupNutritionBarcode = async function (raw) {
+    const code = String(raw || '').replace(/\D/g, '');
+    if (code.length < 8) { nutritionToast('Enter the full barcode number (at least 8 digits).'); return; }
+    const own = mine[norm(code)];
+    if (own) { nScanStatus('Recognised from your saved products ✓'); showNutritionScanResult(toProd(own)); return; }
+    nScanStatus('Looking up ' + code + '…');
+    try {
+      const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=code,product_name,brands,serving_quantity,nutriments');
+      const j = await r.json();
+      if (j.status !== 1 || !j.product) { teachCard(code, 'I couldn’t find this barcode.'); return; }
+      const prod = nutritionParseProduct({ ...j.product, code });
+      if (!prod) { teachCard(code, 'I found it, but it has no calorie information.', j.product.product_name); return; }
+      nScanStatus('Found it.'); showNutritionScanResult(prod);
+    } catch (e) { teachCard(code, 'I couldn’t reach the food database, so I don’t know this one yet.'); }
+  };
+
+  function teachCard(code, why, nameGuess, existing) {
+    const e = existing || {}, per = e.per || {};
+    nScanStatus(why);
+    $('nutrition-scan-out').innerHTML = `<div class="ns-card" id="teach-card"><strong>${existing ? 'Edit this product' : 'Teach me this product'}</strong>
+      <p class="ns-hint" style="font-family:Inter,sans-serif;font-weight:400;font-size:12px"><b>${esc(why)}</b> Tell me what it is and I’ll remember this barcode - next time you scan it, I’ll know straight away.</p>
+      <label class="ns-l" for="tc-code">Barcode</label><input id="tc-code" class="ns-f" inputmode="numeric" value="${esc(code)}">
+      <label class="ns-l" for="tc-name">Product name</label><input id="tc-name" class="ns-f" maxlength="60" placeholder="e.g. Bulok Ramen" value="${esc(e.name || nameGuess || '')}">
+      <label class="ns-l">Per 100 g (check the label)</label>
+      <div class="ns-grid"><input id="tc-kcal" class="ns-f" type="number" min="0" placeholder="kcal" value="${per.kcal ?? ''}" style="margin:0"><input id="tc-p" class="ns-f" type="number" min="0" step="0.1" placeholder="Protein g" value="${per.p ?? ''}" style="margin:0"><input id="tc-c" class="ns-f" type="number" min="0" step="0.1" placeholder="Carbs g" value="${per.c ?? ''}" style="margin:0"><input id="tc-f" class="ns-f" type="number" min="0" step="0.1" placeholder="Fat g" value="${per.f ?? ''}" style="margin:0"></div>
+      <label class="ns-l" for="tc-g">Usual pack or serving size (grams)</label><input id="tc-g" class="ns-f" type="number" min="1" placeholder="e.g. 85" value="${e.grams || ''}">
+      <div class="ns-btns"><button type="button" class="nutrition-primary-btn" onclick="nsTeachSave()">Save & use</button><button type="button" class="ns-ghost" onclick="startNutritionCamera()">Scan again</button></div>
+      <p class="ns-hint" style="font-family:Inter,sans-serif;font-weight:400">Values are on the back of the pack, usually in a “per 100 g” column.</p></div>`;
+  }
+  window.nsTeachSave = function () {
+    const code = $('tc-code').value.replace(/\D/g, ''), name = $('tc-name').value.trim();
+    const v = ['tc-kcal', 'tc-p', 'tc-c', 'tc-f'].map(id => $(id).value.trim() === '' ? NaN : Number($(id).value));
+    const grams = Number($('tc-g').value) || 100;
+    if (code.length < 8 || code.length > 14) { nutritionToast('A barcode has 8 to 14 digits.'); return; }
+    if (!name) { nutritionToast('Type the product name.'); return; }
+    if (!(v[0] >= 0 && v[0] <= 900)) { nutritionToast('Enter the calories per 100 g (0–900).'); return; }
+    const p = v[1] || 0, c = v[2] || 0, f = v[3] || 0;
+    if (p < 0 || c < 0 || f < 0 || p + c + f > 100.5) { nutritionToast('Protein + carbs + fat can’t be more than 100 g per 100 g. Please check the label.'); return; }
+    if (!(grams >= 1 && grams <= 5000)) { nutritionToast('Enter a pack size between 1 and 5000 g.'); return; }
+    const rec = { code, name, per: { kcal: v[0], p, c, f }, grams: Math.round(grams), saved: Date.now() };
+    mine[norm(code)] = rec;
+    const keys = Object.keys(mine); if (keys.length > 300) { keys.sort((a, b) => (mine[a].saved || 0) - (mine[b].saved || 0)).slice(0, keys.length - 300).forEach(k => delete mine[k]); }
+    persist(); renderMine();
+    showNutritionScanResult(toProd(rec));
+    nScanStatus('Saved ✓ Next time you scan ' + code + ' I’ll know it’s ' + name + '.');
+  };
+  window.nsForget = function (key) {
+    const r = mine[key]; if (!r) return;
+    if (!confirm('Forget ' + r.name + '? You can teach it again any time.')) return;
+    delete mine[key]; persist(); renderMine(); nutritionToast('Forgotten.');
+  };
+  window.nsEditMine = function (code) { const r = mine[norm(code)]; if (r) teachCard(r.code, 'Update the details.', '', r); };
+
+  // saved products get "recognised" note + edit/forget under the result card
+  const _show = window.showNutritionScanResult;
+  window.showNutritionScanResult = function (prod) {
+    _show.apply(this, arguments);
+    if (prod && prod.mine) {
+      const card = document.querySelector('#nutrition-scan-out .ns-card'); if (!card) return;
+      card.insertAdjacentHTML('afterbegin', `<div class="ns-ok">✓ Recognised - you taught me this one.</div>`);
+      card.insertAdjacentHTML('beforeend', `<div class="ns-btns"><button type="button" class="ns-ghost" onclick="nsEditMine('${esc(prod.code)}')">Edit details</button><button type="button" class="ns-ghost" onclick="nsForget('${norm(prod.code)}')">Forget it</button></div>`);
+    }
+  };
+  // a plain "teach" shortcut for when a search finds nothing
+  const _search = window.searchNutritionProducts;
+  window.searchNutritionProducts = async function () {
+    await _search.apply(this, arguments);
+    const out = $('nutrition-scan-out');
+    if (out && !out.children.length) out.innerHTML = '<p class="ns-hint">Can’t find it? Type its <b>barcode</b> above and tap Look up - I’ll ask you what it is and remember it.</p>';
+  };
+  renderMine();
+})();
+</script>
+
 
 </body>
 </html>
