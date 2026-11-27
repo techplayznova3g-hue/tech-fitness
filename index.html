@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <!-- RELEASE INFO: bump app-version (YYYY.MM.DD.N) every time you upload a new version. The note is shown in the "update available" banner. -->
-    <meta name="app-version" content="2026.11.26.1">
-    <meta name="app-update-note" content="New: custom calorie targets, dish builder, barcode teaching, smartwatch and goal plans.">
+    <meta name="app-version" content="2026.11.27.1">
+    <meta name="app-update-note" content="New: drinks can be measured in ml, plus an update notice, custom calories, dish builder and barcode teaching.">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0c0b">
     <link rel="manifest" id="pwa-manifest" href="">
@@ -2485,13 +2485,20 @@ async function startNutritionCamera(){
   }catch(e){console.warn('Scanner start failed',e);nScanStatus('Could not start the camera. Allow camera access, or type the barcode number below.')}
 }
 function onNutritionScanned(code){stopNutritionCamera();nScanEl('nutrition-scan-code').value=code;lookupNutritionBarcode(code)}
-function nutritionParseProduct(pr){const n=pr.nutriments||{};let kc=n['energy-kcal_100g'];if(kc==null&&n['energy_100g']!=null)kc=+n['energy_100g']/4.184;if(kc==null||isNaN(+kc))return null;const sq=+pr.serving_quantity;return{name:pr.product_name||'Unnamed product',brand:(pr.brands||'').split(',')[0],code:pr.code||'',per:{kcal:+kc,p:+n.proteins_100g||0,c:+n.carbohydrates_100g||0,f:+n.fat_100g||0},grams:sq>0?Math.round(sq):100}}
+function nutritionDetectUnit(pr){
+  pr=pr||{};const u=[pr.serving_quantity_unit,pr.product_quantity_unit].map(x=>String(x||'').toLowerCase().trim());
+  if(u.some(x=>['ml','cl','dl','l'].includes(x)))return 'ml';
+  if(/\b\d+([.,]\d+)?\s?(ml|cl|dl|l)\b/i.test(String(pr.quantity||'')))return 'ml';
+  const t=(pr.categories_tags||[]).map(x=>String(x));
+  if(t.some(x=>/^en:(beverages|waters|sodas|juices|energy-drinks|milk-drinks|alcoholic-beverages|plant-based-beverages|iced-teas|sweetened-beverages)/.test(x))&&!t.some(x=>/powder|syrup|concentrate/.test(x)))return 'ml';
+  return 'g'}
+function nutritionParseProduct(pr){const n=pr.nutriments||{};let kc=n['energy-kcal_100g'];if(kc==null&&n['energy_100g']!=null)kc=+n['energy_100g']/4.184;if(kc==null||isNaN(+kc))return null;const sq=+pr.serving_quantity;return{name:pr.product_name||'Unnamed product',brand:(pr.brands||'').split(',')[0],code:pr.code||'',per:{kcal:+kc,p:+n.proteins_100g||0,c:+n.carbohydrates_100g||0,f:+n.fat_100g||0},grams:sq>0?Math.round(sq):100,unit:nutritionDetectUnit(pr)}}
 async function lookupNutritionBarcode(raw){
   const code=String(raw||'').replace(/\D/g,'');
   if(code.length<8){nutritionToast('Enter the full barcode number.');return}
   nScanStatus('Looking up '+code+'…');
   try{
-    const r=await fetch('https://world.openfoodfacts.org/api/v2/product/'+code+'.json?fields=code,product_name,brands,serving_quantity,nutriments');
+    const r=await fetch('https://world.openfoodfacts.org/api/v2/product/'+code+'.json?fields=code,product_name,brands,serving_quantity,serving_quantity_unit,product_quantity_unit,quantity,categories_tags,nutriments');
     const j=await r.json();
     if(j.status!==1||!j.product){nScanStatus('Product not found. Try searching by name, or add it as a custom food.');return}
     const prod=nutritionParseProduct({...j.product,code});
@@ -2503,22 +2510,28 @@ async function searchNutritionProducts(){
   const q=nScanEl('nutrition-scan-q').value.trim();if(!q){nutritionToast('Type a product name first.');return}
   nScanStatus('Searching…');
   try{
-    const r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=10&fields=code,product_name,brands,serving_quantity,nutriments&search_terms='+encodeURIComponent(q));
+    const r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=10&fields=code,product_name,brands,serving_quantity,serving_quantity_unit,product_quantity_unit,quantity,categories_tags,nutriments&search_terms='+encodeURIComponent(q));
     const j=await r.json();nScanResults=(j.products||[]).map(nutritionParseProduct).filter(Boolean);
     nScanStatus(nScanResults.length?'Tap a product to add it.':'No matches with calorie data. Try another name.');
-    nScanEl('nutrition-scan-out').innerHTML=nScanResults.map((x,i)=>`<button class="ns-item" onclick="showNutritionScanResult(nScanResults[${i}])">${escapeHTML(x.name)}<small>${escapeHTML(x.brand)} · ${Math.round(x.per.kcal)} kcal per 100 g</small></button>`).join('');
+    nScanEl('nutrition-scan-out').innerHTML=nScanResults.map((x,i)=>`<button class="ns-item" onclick="showNutritionScanResult(nScanResults[${i}])">${escapeHTML(x.name)}<small>${escapeHTML(x.brand)} · ${Math.round(x.per.kcal)} kcal per 100 ${x.unit==='ml'?'ml':'g'}</small></button>`).join('');
   }catch(e){nScanStatus('Could not reach the food database. Check your connection and try again.')}
 }
 function showNutritionScanResult(prod){
-  nScanned=prod;
-  nScanEl('nutrition-scan-out').innerHTML=`<div class="ns-card"><strong>${escapeHTML(prod.name)}</strong><small>${escapeHTML(prod.brand)} · ${Math.round(prod.per.kcal)} kcal per 100 g</small><div class="ns-row"><input id="ns-grams" type="number" min="1" value="${prod.grams}" oninput="updateNutritionScanPreview()"><span style="align-self:center">grams</span></div><select id="ns-meal">${['Breakfast','Lunch','Dinner','Snack'].map(m=>`<option${m===nutritionSelectedMeal?' selected':''}>${m}</option>`).join('')}</select><p id="ns-preview"></p><button class="nutrition-primary-btn" style="width:100%" onclick="addScannedNutritionFood()">Add to diary</button></div>`;
+  nScanned=prod;const u=prod.unit==='ml'?'ml':'g';
+  nScanEl('nutrition-scan-out').innerHTML=`<div class="ns-card"><strong>${escapeHTML(prod.name)}</strong><small>${escapeHTML(prod.brand)} · ${Math.round(prod.per.kcal)} kcal per 100 ${u}</small><div class="ns-unit" role="group" aria-label="Measure in"><button type="button" class="${u==='g'?'on':''}" onclick="setScanUnit('g')">Food · g</button><button type="button" class="${u==='ml'?'on':''}" onclick="setScanUnit('ml')">Drink · ml</button></div><div class="ns-row"><input id="ns-grams" type="number" min="1" value="${prod.grams}" oninput="updateNutritionScanPreview()" aria-label="Amount in ${u==='ml'?'millilitres':'grams'}"><span style="align-self:center">${u==='ml'?'ml':'grams'}</span></div><select id="ns-meal">${['Breakfast','Lunch','Dinner','Snack'].map(m=>`<option${m===nutritionSelectedMeal?' selected':''}>${m}</option>`).join('')}</select><p id="ns-preview"></p><button class="nutrition-primary-btn" style="width:100%" onclick="addScannedNutritionFood()">Add to diary</button></div>`;
   updateNutritionScanPreview();
 }
-function updateNutritionScanPreview(){if(!nScanned)return;const g=+nScanEl('ns-grams').value||0,k=g/100,x=nScanned.per;nScanEl('ns-preview').textContent=`${Math.round(x.kcal*k)} kcal · P ${Math.round(x.p*k)} · C ${Math.round(x.c*k)} · F ${Math.round(x.f*k)}`}
+function setScanUnit(u){
+  if(!nScanned)return;const cur=+nScanEl('ns-grams').value;
+  if(cur>0)nScanned.grams=Math.round(cur);nScanned.unit=u==='ml'?'ml':'g';
+  if(nScanned.mine&&window.nsSetMineUnit)window.nsSetMineUnit(nScanned.code,nScanned.unit);
+  showNutritionScanResult(nScanned);
+}
+function updateNutritionScanPreview(){if(!nScanned)return;const g=+nScanEl('ns-grams').value||0,k=g/100,x=nScanned.per,u=nScanned.unit==='ml'?'ml':'g';nScanEl('ns-preview').textContent=`${g} ${u}: ${Math.round(x.kcal*k)} kcal · P ${Math.round(x.p*k)} · C ${Math.round(x.c*k)} · F ${Math.round(x.f*k)}`}
 function addScannedNutritionFood(){
-  if(!nScanned)return;const g=+nScanEl('ns-grams').value;if(!(g>0&&g<5000)){nutritionToast('Enter an amount in grams.');return}
+  if(!nScanned)return;const u=nScanned.unit==='ml'?'ml':'g',g=+nScanEl('ns-grams').value;if(!(g>0&&g<5000)){nutritionToast('Enter an amount in '+(u==='ml'?'ml':'grams')+' (up to 5000).');return}
   const k=g/100,x=nScanned.per;nutritionSelectedMeal=nScanEl('ns-meal').value;
-  nutritionDay().push({id:'scan-'+Date.now(),name:nScanned.name,emoji:'🏷️',serving:g+' g',kcal:Math.round(x.kcal*k),p:Math.round(x.p*k*10)/10,c:Math.round(x.c*k*10)/10,f:Math.round(x.f*k*10)/10,meal:nutritionSelectedMeal,loggedAt:Date.now()});
+  nutritionDay().push({id:'scan-'+Date.now(),name:nScanned.name,emoji:u==='ml'?'🥤':'🏷️',serving:g+' '+u,kcal:Math.round(x.kcal*k),p:Math.round(x.p*k*10)/10,c:Math.round(x.c*k*10)/10,f:Math.round(x.f*k*10)/10,meal:nutritionSelectedMeal,loggedAt:Date.now()});
   saveNutritionData();closeNutritionScan();toggleNutritionAddPanel(false);renderNutritionAll();showNutritionView('diary');nutritionToast(nScanned.name+' added to '+nutritionSelectedMeal.toLowerCase()+'.');
 }
 
@@ -3828,6 +3841,9 @@ loadNutritionData();
 .ns-card input.ns-f{width:100%;background:#232422;color:#f4f5f0;border:1px solid #2a2c29;border-radius:16px;padding:12px;font-size:14px;margin-top:8px}
 .ns-card label.ns-l{display:block;font-size:11px;font-weight:700;color:#8b8f88;margin:12px 0 0;letter-spacing:.04em;text-transform:uppercase}
 .ns-card .ns-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.ns-unit{display:flex;background:#232422;border-radius:999px;padding:3px;gap:2px;margin-top:8px}
+.ns-unit button{flex:1;border:0;background:transparent;color:#8b8f88;font-weight:700;font-size:12px;padding:8px 6px;border-radius:999px}
+.ns-unit button.on{background:#c8ff00;color:#0b0c0b}
 .ns-ghost{border:1px solid #2a2c29;background:#171817;color:#f4f5f0;font-weight:700;border-radius:999px;padding:12px;font-size:13px}
 .ns-mine summary{cursor:pointer;font-size:12px;font-weight:700;color:#c9cdc4;margin-top:10px}
 .ns-mine-row{display:flex;align-items:center;gap:8px;background:#171817;border:1px solid #2a2c29;border-radius:14px;padding:8px 12px;margin-top:6px;font-size:13px}
@@ -3845,14 +3861,16 @@ loadNutritionData();
   let mine = {};
   try { const p = JSON.parse(localStorage.getItem(KEY) || '{}'); if (p && typeof p === 'object' && !Array.isArray(p)) mine = p; } catch (e) { /* start empty */ }
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(mine)); } catch (e) { nutritionToast('Could not save on this device.'); } };
-  const toProd = r => ({ name: r.name, brand: 'Saved by you', code: r.code, per: r.per, grams: r.grams, mine: true });
+  const toProd = r => ({ name: r.name, brand: 'Saved by you', code: r.code, per: r.per, grams: r.grams, unit: r.unit === 'ml' ? 'ml' : 'g', mine: true });
+  let teachUnit = 'g';
+  window.nsSetMineUnit = function (code, unit) { const r = mine[norm(code)]; if (r) { r.unit = unit === 'ml' ? 'ml' : 'g'; persist(); renderMine(); } };
 
   // --- the little explainer + saved list inside the scanner ---
   function renderMine() {
     const box = $('ns-mine'); if (!box) return;
     const list = Object.values(mine).sort((a, b) => (b.saved || 0) - (a.saved || 0));
     box.innerHTML = list.length ? `<details class="ns-mine"><summary>My saved products (${list.length})</summary>${list.map(r =>
-      `<div class="ns-mine-row"><div>${esc(r.name)}<small>${esc(r.code)} · ${Math.round(r.per.kcal)} kcal per 100 g</small></div><button type="button" aria-label="Forget ${esc(r.name)}" onclick="nsForget('${norm(r.code)}')">✕</button></div>`).join('')}</details>` : '';
+      `<div class="ns-mine-row"><div>${esc(r.name)}<small>${esc(r.code)} · ${Math.round(r.per.kcal)} kcal per 100 ${r.unit === 'ml' ? 'ml' : 'g'}</small></div><button type="button" aria-label="Forget ${esc(r.name)}" onclick="nsForget('${norm(r.code)}')">✕</button></div>`).join('')}</details>` : '';
   }
   const _open = window.openNutritionScan;
   window.openNutritionScan = function () { _open.apply(this, arguments); renderMine(); };
@@ -3865,28 +3883,37 @@ loadNutritionData();
     if (own) { nScanStatus('Recognised from your saved products ✓'); showNutritionScanResult(toProd(own)); return; }
     nScanStatus('Looking up ' + code + '…');
     try {
-      const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=code,product_name,brands,serving_quantity,nutriments');
+      const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=code,product_name,brands,serving_quantity,serving_quantity_unit,product_quantity_unit,quantity,categories_tags,nutriments');
       const j = await r.json();
       if (j.status !== 1 || !j.product) { teachCard(code, 'I couldn’t find this barcode.'); return; }
       const prod = nutritionParseProduct({ ...j.product, code });
-      if (!prod) { teachCard(code, 'I found it, but it has no calorie information.', j.product.product_name); return; }
+      if (!prod) { teachCard(code, 'I found it, but it has no calorie information.', j.product.product_name, undefined, nutritionDetectUnit(j.product)); return; }
       nScanStatus('Found it.'); showNutritionScanResult(prod);
     } catch (e) { teachCard(code, 'I couldn’t reach the food database, so I don’t know this one yet.'); }
   };
 
-  function teachCard(code, why, nameGuess, existing) {
+  function teachCard(code, why, nameGuess, existing, unitGuess) {
     const e = existing || {}, per = e.per || {};
+    teachUnit = (e.unit || unitGuess) === 'ml' ? 'ml' : 'g';
     nScanStatus(why);
     $('nutrition-scan-out').innerHTML = `<div class="ns-card" id="teach-card"><strong>${existing ? 'Edit this product' : 'Teach me this product'}</strong>
       <p class="ns-hint" style="font-family:Inter,sans-serif;font-weight:400;font-size:12px"><b>${esc(why)}</b> Tell me what it is and I’ll remember this barcode - next time you scan it, I’ll know straight away.</p>
       <label class="ns-l" for="tc-code">Barcode</label><input id="tc-code" class="ns-f" inputmode="numeric" value="${esc(code)}">
       <label class="ns-l" for="tc-name">Product name</label><input id="tc-name" class="ns-f" maxlength="60" placeholder="e.g. Bulok Ramen" value="${esc(e.name || nameGuess || '')}">
-      <label class="ns-l">Per 100 g (check the label)</label>
+      <label class="ns-l">What is it?</label><div class="ns-unit" role="group" aria-label="Food or drink"><button type="button" id="tc-u-g" class="${teachUnit === 'g' ? 'on' : ''}" onclick="nsTeachUnit('g')">Food · grams</button><button type="button" id="tc-u-ml" class="${teachUnit === 'ml' ? 'on' : ''}" onclick="nsTeachUnit('ml')">Drink · ml</button></div>
+      <label class="ns-l" id="tc-per-label">Per 100 ${teachUnit} (check the label)</label>
       <div class="ns-grid"><input id="tc-kcal" class="ns-f" type="number" min="0" placeholder="kcal" value="${per.kcal ?? ''}" style="margin:0"><input id="tc-p" class="ns-f" type="number" min="0" step="0.1" placeholder="Protein g" value="${per.p ?? ''}" style="margin:0"><input id="tc-c" class="ns-f" type="number" min="0" step="0.1" placeholder="Carbs g" value="${per.c ?? ''}" style="margin:0"><input id="tc-f" class="ns-f" type="number" min="0" step="0.1" placeholder="Fat g" value="${per.f ?? ''}" style="margin:0"></div>
-      <label class="ns-l" for="tc-g">Usual pack or serving size (grams)</label><input id="tc-g" class="ns-f" type="number" min="1" placeholder="e.g. 85" value="${e.grams || ''}">
+      <label class="ns-l" for="tc-g" id="tc-g-label">${teachUnit === 'ml' ? 'Usual can, bottle or glass size (ml)' : 'Usual pack or serving size (grams)'}</label><input id="tc-g" class="ns-f" type="number" min="1" placeholder="${teachUnit === 'ml' ? 'e.g. 330' : 'e.g. 85'}" value="${e.grams || ''}">
       <div class="ns-btns"><button type="button" class="nutrition-primary-btn" onclick="nsTeachSave()">Save & use</button><button type="button" class="ns-ghost" onclick="startNutritionCamera()">Scan again</button></div>
-      <p class="ns-hint" style="font-family:Inter,sans-serif;font-weight:400">Values are on the back of the pack, usually in a “per 100 g” column.</p></div>`;
+      <p class="ns-hint" style="font-family:Inter,sans-serif;font-weight:400">Values are on the back of the pack, usually in a “per 100 g” or “per 100 ml” column.</p></div>`;
   }
+  window.nsTeachUnit = function (u) {
+    teachUnit = u === 'ml' ? 'ml' : 'g';
+    $('tc-u-g').classList.toggle('on', teachUnit === 'g'); $('tc-u-ml').classList.toggle('on', teachUnit === 'ml');
+    $('tc-per-label').textContent = 'Per 100 ' + teachUnit + ' (check the label)';
+    $('tc-g-label').textContent = teachUnit === 'ml' ? 'Usual can, bottle or glass size (ml)' : 'Usual pack or serving size (grams)';
+    $('tc-g').placeholder = teachUnit === 'ml' ? 'e.g. 330' : 'e.g. 85';
+  };
   window.nsTeachSave = function () {
     const code = $('tc-code').value.replace(/\D/g, ''), name = $('tc-name').value.trim();
     const v = ['tc-kcal', 'tc-p', 'tc-c', 'tc-f'].map(id => $(id).value.trim() === '' ? NaN : Number($(id).value));
@@ -3896,8 +3923,8 @@ loadNutritionData();
     if (!(v[0] >= 0 && v[0] <= 900)) { nutritionToast('Enter the calories per 100 g (0–900).'); return; }
     const p = v[1] || 0, c = v[2] || 0, f = v[3] || 0;
     if (p < 0 || c < 0 || f < 0 || p + c + f > 100.5) { nutritionToast('Protein + carbs + fat can’t be more than 100 g per 100 g. Please check the label.'); return; }
-    if (!(grams >= 1 && grams <= 5000)) { nutritionToast('Enter a pack size between 1 and 5000 g.'); return; }
-    const rec = { code, name, per: { kcal: v[0], p, c, f }, grams: Math.round(grams), saved: Date.now() };
+    if (!(grams >= 1 && grams <= 5000)) { nutritionToast('Enter a size between 1 and 5000 ' + teachUnit + '.'); return; }
+    const rec = { code, name, per: { kcal: v[0], p, c, f }, grams: Math.round(grams), unit: teachUnit, saved: Date.now() };
     mine[norm(code)] = rec;
     const keys = Object.keys(mine); if (keys.length > 300) { keys.sort((a, b) => (mine[a].saved || 0) - (mine[b].saved || 0)).slice(0, keys.length - 300).forEach(k => delete mine[k]); }
     persist(); renderMine();
