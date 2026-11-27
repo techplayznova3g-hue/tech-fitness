@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- RELEASE INFO: bump app-version (YYYY.MM.DD.N) every time you upload a new version. The note is shown in the "update available" banner. -->
+    <meta name="app-version" content="2026.11.26.1">
+    <meta name="app-update-note" content="New: custom calorie targets, dish builder, barcode teaching, smartwatch and goal plans.">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0b0c0b">
     <link rel="manifest" id="pwa-manifest" href="">
@@ -592,6 +595,14 @@ nav.fixed>div{height:66px;padding:0 6px;align-items:center}
                             <p class="text-xs text-slate-400">Retake the questionnaire & refresh plan</p>
                         </div>
                         <span class="text-xs font-bold text-emerald-400">Retake Quiz</span>
+                    </button>
+
+                    <button onclick="checkForUpdate(true)" class="w-full p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between hover:bg-slate-800/60 transition active:scale-[0.99]">
+                        <div class="text-left">
+                            <h4 class="text-sm font-semibold text-slate-200">Check for updates</h4>
+                            <p id="app-version-label" class="text-xs text-slate-400">Version</p>
+                        </div>
+                        <span class="text-xs font-bold text-emerald-400">Check</span>
                     </button>
 
                     <button onclick="handleLogout()" class="w-full p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-between hover:bg-rose-500/15 transition active:scale-[0.99]">
@@ -3921,6 +3932,111 @@ loadNutritionData();
 })();
 </script>
 
+
+<!-- ==================== UPDATE CHECKER ==================== -->
+<style id="update-styles">
+#tf-update{position:fixed;top:max(env(safe-area-inset-top,0px),10px);left:10px;right:10px;max-width:520px;margin:0 auto;z-index:99990;display:flex;align-items:center;gap:10px;background:#171817;color:#f4f5f0;border:1px solid rgba(200,255,0,.5);border-radius:20px;padding:12px 12px 12px 16px;box-shadow:0 14px 40px rgba(0,0,0,.55),0 0 0 4px rgba(200,255,0,.08);font-family:Inter,system-ui,sans-serif;animation:tfuIn .45s cubic-bezier(.2,1.2,.4,1) both}
+#tf-update .tfu-text{flex:1;min-width:0}
+#tf-update strong{display:block;font-size:13px;font-weight:800;color:#c8ff00}
+#tf-update span{display:block;font-size:12px;line-height:1.4;color:#c9cdc4;margin-top:2px}
+#tf-update .tfu-go{border:0;background:#c8ff00;color:#0b0c0b;font-weight:800;font-size:13px;border-radius:999px;padding:10px 14px;white-space:nowrap}
+#tf-update .tfu-go[disabled]{opacity:.6}
+#tf-update .tfu-x{border:0;background:transparent;color:#8b8f88;font-size:20px;line-height:1;padding:4px 6px}
+#tf-update.out{animation:tfuOut .25s ease forwards}
+@keyframes tfuIn{from{transform:translateY(-24px);opacity:0}to{transform:none;opacity:1}}
+@keyframes tfuOut{to{transform:translateY(-24px);opacity:0}}
+@media (prefers-reduced-motion:reduce){#tf-update,#tf-update.out{animation:none}}
+</style>
+
+<script id="update-logic">
+(function () {
+  'use strict';
+  const metaVal = n => { const m = document.querySelector('meta[name="' + n + '"]'); return m ? (m.getAttribute('content') || '') : ''; };
+  const LOCAL = metaVal('app-version') || '0';
+  const BASE = location.href.split('#')[0].split('?')[0];
+  const DISMISS_KEY = 'tf_update_dismissed', SEEN_KEY = 'tf_last_version_seen';
+  let lastCheck = 0, busy = false, pending = null;
+
+  const cmp = (a, b) => {
+    const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d > 0 ? 1 : -1; }
+    return 0;
+  };
+  const decode = s => { const t = document.createElement('textarea'); t.innerHTML = s; return t.value; };
+  const toast = m => { if (typeof showToast === 'function') showToast(m); };
+  function setLabel(extra) {
+    const el = document.getElementById('app-version-label');
+    if (el) el.textContent = 'Version ' + LOCAL + (extra ? ' · ' + extra : '');
+  }
+
+  // Only the top of the page is needed (the version lives in <head>), so ask for just that.
+  async function fetchRemote() {
+    const r = await fetch(BASE + '?_=' + Date.now(), { cache: 'no-store', headers: { Range: 'bytes=0-6143' } });
+    if (!r.ok && r.status !== 206) throw new Error('HTTP ' + r.status);
+    const t = await r.text();
+    const v = (t.match(/<meta\s+name="app-version"\s+content="([^"]+)"/i) || [])[1];
+    if (!v) throw new Error('no version found');
+    const n = (t.match(/<meta\s+name="app-update-note"\s+content="([^"]*)"/i) || [])[1] || '';
+    return { v: v.trim(), n: decode(n).trim() };
+  }
+
+  function showBanner(r) {
+    if (document.getElementById('tf-update')) return;
+    const b = document.createElement('div');
+    b.id = 'tf-update'; b.setAttribute('role', 'status');
+    b.innerHTML = '<div class="tfu-text"><strong>✨ New version available</strong><span></span></div><button type="button" class="tfu-go">Update now</button><button type="button" class="tfu-x" aria-label="Remind me later">×</button>';
+    b.querySelector('span').textContent = r.n || ('Version ' + r.v + ' is ready. Your data stays on this device.');
+    b.querySelector('.tfu-go').addEventListener('click', applyUpdate);
+    b.querySelector('.tfu-x').addEventListener('click', () => {
+      try { sessionStorage.setItem(DISMISS_KEY, r.v); } catch (e) { /* ignore */ }
+      b.classList.add('out'); setTimeout(() => b.remove(), 300);
+    });
+    document.body.appendChild(b);
+  }
+
+  async function applyUpdate() {
+    if (typeof isTimerRunning !== 'undefined' && isTimerRunning && !confirm('A timer is still running. Update anyway?')) return;
+    const btn = document.querySelector('#tf-update .tfu-go'); if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+    try { await fetch(BASE, { cache: 'reload' }); } catch (e) { /* offline: reload anyway */ }
+    location.reload();
+  }
+
+  window.checkForUpdate = async function (manual) {
+    if (busy) return;
+    if (!manual && Date.now() - lastCheck < 5 * 60 * 1000) return;
+    busy = true; lastCheck = Date.now();
+    if (manual) setLabel('checking…');
+    try {
+      const r = await fetchRemote();
+      if (cmp(r.v, LOCAL) > 0) {
+        pending = r;
+        let dismissed = false; try { dismissed = sessionStorage.getItem(DISMISS_KEY) === r.v; } catch (e) { /* ignore */ }
+        if (manual || !dismissed) showBanner(r);
+        setLabel('update available');
+      } else {
+        pending = null; setLabel('');
+        if (manual) toast('You’re on the latest version (' + LOCAL + ').');
+      }
+    } catch (e) {
+      setLabel('');
+      if (manual) toast('Couldn’t check for updates right now. Check your connection and try again.');
+    } finally { busy = false; }
+  };
+
+  // After an update has been applied, say so once.
+  try {
+    const seen = localStorage.getItem(SEEN_KEY);
+    if (seen && cmp(LOCAL, seen) > 0) setTimeout(() => toast('✨ Updated to version ' + LOCAL), 3600);
+    localStorage.setItem(SEEN_KEY, LOCAL);
+  } catch (e) { /* ignore */ }
+
+  setLabel('');
+  setTimeout(() => checkForUpdate(false), 4500);                                   // shortly after the splash
+  setInterval(() => checkForUpdate(false), 30 * 60 * 1000);                         // while the app stays open
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(false); });
+  window.addEventListener('online', () => checkForUpdate(false));
+})();
+</script>
 
 </body>
 </html>
